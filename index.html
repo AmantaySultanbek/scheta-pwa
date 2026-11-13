@@ -87,6 +87,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
 .doc .line{display:inline-block;border-bottom:1px solid #000;min-width:120px;height:14px;vertical-align:bottom}
 .doc .cap{font-size:8.5px;text-align:center;color:#000}
 .doc .gap{height:10px}
+.doc .sigline{position:relative}
+.doc .sigimg{position:absolute;left:50%;bottom:-14px;transform:translateX(-50%);height:50px;max-width:none;pointer-events:none}
+.sig-box{border:1px dashed var(--line);border-radius:8px;min-height:90px;display:flex;align-items:center;justify-content:center;background:#fff;margin-bottom:12px}
+.sig-box img{max-height:110px;max-width:100%}
 
 @page{size:A4;margin:0}
 @media print{
@@ -127,7 +131,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
 /* ================= Storage ================= */
 const KEY = 'scheta-data-v1';
 const DEFAULTS = () => ({
-  seller:{name:'',bin:'',address:'',iik:'',bank:'',bik:'',kbe:'19',knp:'859',director:'',contract:'Без договора'},
+  seller:{name:'',bin:'',address:'',iik:'',bank:'',bik:'',kbe:'19',knp:'859',director:'',signName:'',contract:'Без договора'},
+  signature:'', useSign:true,
   service:{name:'Услуги',unit:'усл.'},
   nextInv:1, nextAct:1,
   vat:false, vatRate:12,
@@ -164,6 +169,8 @@ function merge(def,p){
   if(!Array.isArray(d.seeded)) d.seeded=[];
   d.nextInv = +d.nextInv||1; d.nextAct = +d.nextAct||1;
   d.vatRate = +d.vatRate||0; d.vat = !!d.vat;
+  if(typeof d.signature!=='string' || !d.signature.startsWith('data:image/')) d.signature='';
+  d.useSign = d.useSign!==false;
   return d;
 }
 let S = load();
@@ -405,6 +412,8 @@ function vatLine(d){
   return d.vat?`В том числе НДС ${d.vatRate}%`:'Без НДС';
 }
 function vatValue(d){ return d.vat?money(vatAmount(d.sum,d.vatRate)):'-'; }
+function signName(s){ return s.signName||s.director||''; }
+function sigImg(){ return (S.useSign&&S.signature)?`<img class="sigimg" src="${S.signature}" alt="">`:''; }
 function partyLine(p){
   return [p.bin?'БИН / ИИН '+p.bin:'',p.name,p.address].filter(Boolean).map(esc).join(', ');
 }
@@ -442,7 +451,7 @@ function invoiceHTML(d){
   <div style="margin-top:6px">Всего наименований 1, на сумму ${money(d.sum)} KZT</div>
   <div class="bold">Всего к оплате: ${sumInWords(d.sum)}</div>
   <div class="rule" style="margin-top:8px"></div>
-  <div class="sign"><span class="bold">Исполнитель</span> <span class="line" style="min-width:200px"></span> /${esc(s.director)}/</div>
+  <div class="sign"><span class="bold">Исполнитель</span> <span class="line sigline" style="min-width:200px">${sigImg()}</span> /${esc(signName(s))}/</div>
   </div>`;
 }
 function actHTML(d){
@@ -481,7 +490,7 @@ function actHTML(d){
     <tr>
       <td style="width:50%;padding-right:16px">
         <div><b>Сдал (Исполнитель)</b></div>
-        <div style="margin-top:14px"><span class="line" style="min-width:90px"></span> / <span class="line" style="min-width:80px"></span> / <span class="line" style="min-width:120px;text-align:center">${esc(s.director)}</span></div>
+        <div style="margin-top:14px"><span class="line" style="min-width:90px"></span> / <span class="line sigline" style="min-width:80px">${sigImg()}</span> / <span class="line" style="min-width:120px;text-align:center">${esc(signName(s))}</span></div>
         <div class="cap" style="text-align:left">&nbsp;&nbsp;должность&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;подпись&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;расшифровка подписи</div>
         <div style="margin-top:14px">М.П.</div>
       </td>
@@ -546,7 +555,8 @@ function renderSettings(m){
     <div class="grid">
       ${f('name','Наименование','ИП Иванов И.И.','class="full"')}
       ${f('bin','БИН/ИИН','123456789012')}
-      ${f('director','ФИО руководителя','Иванов И.И.')}
+      ${f('director','ФИО руководителя','Иванов Иван Иванович')}
+      ${f('signName','Расшифровка подписи (в документах)','Иванов И.И.')}
       ${f('address','Адрес','г. Алматы, ул. Абая, 1','class="full"')}
       ${f('bank','Банк','АО "Kaspi Bank"','class="full"')}
       ${f('iik','ИИК','KZ00000000000000000')}
@@ -568,6 +578,14 @@ function renderSettings(m){
   </div>
   <button class="btn primary big" type="submit">Сохранить настройки</button>
   </form>
+  <div class="card" style="margin-top:16px"><h2>Подпись</h2>
+    <div class="sig-box">${S.signature?`<img src="${S.signature}" alt="Подпись">`:'<span class="hint">Подпись не загружена</span>'}</div>
+    <label class="check" style="margin-bottom:12px"><input type="checkbox" id="useSign" ${S.useSign?'checked':''}> Ставить подпись в документы</label>
+    <div class="row"><button class="btn" id="bSign">📷 Загрузить фото подписи</button>
+      ${S.signature?'<button class="btn danger" id="bSignDel">Удалить подпись</button>':''}
+      <input type="file" id="fileSign" accept="image/*" hidden></div>
+    <p class="hint">Сфотографируйте подпись на белой бумаге — фон уберётся, подпись станет синей. Хранится только на этом устройстве и не публикуется в интернете.</p>
+  </div>
   <div class="card" style="margin-top:16px"><h2>Резервная копия</h2>
     <p class="hint" style="margin-top:0">Все данные хранятся только в этом браузере. Регулярно сохраняйте копию — при очистке данных браузера они пропадут.</p>
     <div class="row"><button class="btn" id="bExport">⬇ Экспорт JSON</button>
@@ -587,6 +605,14 @@ function renderSettings(m){
     S.vatRate=parseFloat(String(fd.get('vatRate')).replace(',','.'))||0;
     save(); toast('Настройки сохранены');
   });
+  $('#useSign').onchange=e=>{ S.useSign=e.target.checked; save(); toast(S.useSign?'Подпись будет в документах':'Подпись отключена'); };
+  $('#bSign').onclick=()=>$('#fileSign').click();
+  $('#fileSign').onchange=async e=>{
+    const file=e.target.files[0]; e.target.value=''; if(!file) return;
+    try{ S.signature=await makeSignature(file); S.useSign=true; save(); render(); toast('Подпись сохранена'); }
+    catch(err){ toast('Не удалось обработать фото: '+err.message); }
+  };
+  const sd=$('#bSignDel'); if(sd) sd.onclick=()=>confirmBtn(sd,()=>{ S.signature=''; save(); render(); toast('Подпись удалена'); });
   $('#bExport').onclick=()=>{
     const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
@@ -607,6 +633,44 @@ function renderSettings(m){
     };
     r.readAsText(file); e.target.value='';
   };
+}
+
+/* Фото подписи → синяя подпись на прозрачном фоне */
+function makeSignature(file){
+  return new Promise((resolve,reject)=>{
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('неподдерживаемый формат')); };
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const k=Math.min(1,600/Math.max(img.width,img.height));
+      const W=Math.max(1,Math.round(img.width*k)), H=Math.max(1,Math.round(img.height*k));
+      const c=document.createElement('canvas'); c.width=W; c.height=H;
+      const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,W,H);
+      const im=ctx.getImageData(0,0,W,H), p=im.data, lum=new Float32Array(W*H);
+      for(let i=0;i<W*H;i++) lum[i]=.299*p[i*4]+.587*p[i*4+1]+.114*p[i*4+2];
+      // фон — 80-й перцентиль яркости в соседнем окне (учитывает тени и неравномерный свет)
+      const B=24, gw=Math.ceil(W/B), gh=Math.ceil(H/B), bg=new Float32Array(gw*gh);
+      for(let gy=0;gy<gh;gy++) for(let gx=0;gx<gw;gx++){
+        const v=[];
+        for(let y=Math.max(0,(gy-1)*B);y<Math.min(H,(gy+2)*B);y+=2) for(let x=Math.max(0,(gx-1)*B);x<Math.min(W,(gx+2)*B);x+=2) v.push(lum[y*W+x]);
+        v.sort((a,b)=>a-b); bg[gy*gw+gx]=v[Math.floor(v.length*.8)];
+      }
+      let x0=W,y0=H,x1=-1,y1=-1;
+      for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+        const i=y*W+x, d=bg[Math.floor(y/B)*gw+Math.floor(x/B)]-lum[i];
+        const a=Math.max(0,Math.min(255,(d-14)*5));
+        p[i*4]=20; p[i*4+1]=55; p[i*4+2]=170; p[i*4+3]=a;
+        if(a>80){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; }
+      }
+      if(x1<0) return reject(new Error('подпись не найдена на фото'));
+      ctx.putImageData(im,0,0);
+      const pad=4; x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad); x1=Math.min(W-1,x1+pad); y1=Math.min(H-1,y1+pad);
+      const o=document.createElement('canvas'); o.width=x1-x0+1; o.height=y1-y0+1;
+      o.getContext('2d').drawImage(c,x0,y0,o.width,o.height,0,0,o.width,o.height);
+      resolve(o.toDataURL('image/png'));
+    };
+    img.src=url;
+  });
 }
 
 render();
