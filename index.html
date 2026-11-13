@@ -131,8 +131,22 @@ const DEFAULTS = () => ({
   service:{name:'Услуги',unit:'усл.'},
   nextInv:1, nextAct:1,
   vat:false, vatRate:12,
-  buyers:[], docs:[]
+  buyers:[], docs:[], seeded:[]
 });
+// Встроенные покупатели: добавляются один раз на каждом устройстве (после удаления не возвращаются)
+const PRESET_BUYERS = [
+  {id:'mwf3kltkdxefx', name:'ТОО "Bolashak Electric"', bin:'180540012393', director:'Тулебаев Канат Канашевич',
+   address:'Республика Казахстан, город Астана, район Алматы, проспект Әл-Фараби, здание 97/3', contract:''}
+];
+function seedBuyers(d){
+  let changed=false;
+  for(const p of PRESET_BUYERS){
+    if(d.seeded.includes(p.id)) continue;
+    if(!d.buyers.some(b=>b.id===p.id||(p.bin&&b.bin===p.bin))) d.buyers.push(Object.assign({},p));
+    d.seeded.push(p.id); changed=true;
+  }
+  return changed;
+}
 function load(){
   let d = DEFAULTS();
   try{
@@ -147,6 +161,7 @@ function merge(def,p){
   d.service = Object.assign({},def.service,(p||{}).service);
   if(!Array.isArray(d.buyers)) d.buyers=[];
   if(!Array.isArray(d.docs)) d.docs=[];
+  if(!Array.isArray(d.seeded)) d.seeded=[];
   d.nextInv = +d.nextInv||1; d.nextAct = +d.nextAct||1;
   d.vatRate = +d.vatRate||0; d.vat = !!d.vat;
   return d;
@@ -156,6 +171,7 @@ function save(){
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }
   catch(e){ toast('Не удалось сохранить данные: '+e.message); }
 }
+if(seedBuyers(S)) save();
 
 /* ================= Helpers ================= */
 const $ = (s,r=document)=>r.querySelector(s);
